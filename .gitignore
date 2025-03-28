@@ -1,0 +1,4 @@
+.DS_Store
+tollmachter-venv/
+__pycache__/
+*.pyc
