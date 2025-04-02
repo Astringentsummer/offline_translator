@@ -7,7 +7,7 @@ import os
 import time
 
 class AudioRecorder:
-    def __init__(self, sample_rate=44100, channels=1, chunk=1024, folder_name="guest_mic_recordings"):
+    def __init__(self, sample_rate=44100, channels=1, chunk=1024, folder_name="guest_mic_recordings", mic_name=None):
         self.sample_rate = sample_rate
         self.channels = channels
         self.chunk = chunk
@@ -15,16 +15,21 @@ class AudioRecorder:
         self.stream = None
         self.frames = []
         self.is_recording = False
-        self.device_name = self.get_microphone_name()
+        self.device_index = self.get_input_device_index(mic_name)
+        self.device_name = self.get_device_name(self.device_index)
         self.output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", folder_name)
         os.makedirs(self.output_dir, exist_ok=True)
 
-    def get_microphone_name(self):
+    def get_input_device_index(self, target_name=None):
         for i in range(self.audio.get_device_count()):
-            device_info = self.audio.get_device_info_by_index(i)
-            if device_info.get("maxInputChannels", 0) > 0:
-                return device_info["name"].replace(" ", "_")
-        return "UnknownMic"
+            info = self.audio.get_device_info_by_index(i)
+            if info.get("maxInputChannels", 0) > 0:
+                if target_name is None or target_name.lower() in info["name"].lower():
+                    return i
+        raise ValueError(f"No input device found matching name: {target_name}")
+
+    def get_device_name(self, index):
+        return self.audio.get_device_info_by_index(index)["name"].replace(" ", "_")
 
     def start_recording(self):
         if self.is_recording:
@@ -34,9 +39,9 @@ class AudioRecorder:
                                       channels=self.channels,
                                       rate=self.sample_rate,
                                       input=True,
+                                      input_device_index=self.device_index,
                                       frames_per_buffer=self.chunk)
         self.is_recording = True
-        
 
     def stop_recording(self):
         if not self.is_recording:
@@ -54,11 +59,13 @@ class AudioRecorder:
             wf.writeframes(b''.join(self.frames))
         self.last_filepath = filepath
 
-
     def record_chunk(self):
         if self.is_recording:
-            data = self.stream.read(self.chunk)
-            self.frames.append(data)
+            try:
+                data = self.stream.read(self.chunk, exception_on_overflow=False)
+                self.frames.append(data)
+            except Exception as e:
+                print(f"Audio read error: {e}")
 
     def close(self):
         if self.stream:
@@ -68,3 +75,15 @@ class AudioRecorder:
     def get_last_filepath(self):
         return getattr(self, "last_filepath", None)
 
+if __name__ == "__main__":
+    recorder = AudioRecorder(mic_name="SF-558")
+    print("Recording for 5 seconds...")
+    recorder.start_recording()
+    
+    duration = 5  # seconds
+    for _ in range(0, int(recorder.sample_rate / recorder.chunk * duration)):
+        recorder.record_chunk()
+    
+    recorder.stop_recording()
+    recorder.close()
+    print(f"Saved to: {recorder.get_last_filepath()}")

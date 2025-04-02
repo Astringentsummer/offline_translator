@@ -1,4 +1,4 @@
-# # Function: a 3-second press for shutdown and a 5-second press for reboot
+# Function: a 3-second press for shutdown and a 5-second press for reboot
 # How to test? 1. activate virtual env 2. connect rightly 3. delete print and run with sudo
 import RPi.GPIO as GPIO
 import time
