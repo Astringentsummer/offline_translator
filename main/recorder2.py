@@ -1,13 +1,13 @@
 # requirement: pip install sounddevice numpy scipy simpleaudio
-# Function: Record and save sounds without button1
-# How to test: 1.make sure Usb-microphone connectted 2.activate env 3.python3 tests/test_record.py
+# Function: Record and save sounds without button2
+# How to test: 1.make sure Headset-microphone connectted 2.activate env 3.python3 tests/test_record2.py
 import pyaudio
 import wave
 import os
 import time
 
 class AudioRecorder:
-    def __init__(self, sample_rate=48000, channels=1, chunk=1024, folder_name="guest_mic_recordings", mic_name=None):
+    def __init__(self, sample_rate=48000, channels=1, chunk=1024, folder_name="user_mic_recordings", mic_name=None):
         self.sample_rate = sample_rate
         self.channels = channels
         self.chunk = chunk
@@ -76,7 +76,7 @@ class AudioRecorder:
         return getattr(self, "last_filepath", None)
 
 if __name__ == "__main__":
-    recorder = AudioRecorder(mic_name="SF-558")
+    recorder = AudioRecorder(mic_name="EPOS PC 7 USB")
     print("Recording for 5 seconds...")
     recorder.start_recording()
     

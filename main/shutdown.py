@@ -17,9 +17,9 @@ while True:
         duration = release_time - press_time
 
         if duration >= 5:
-            print("REBOOT")
+            # print("REBOOT")
             # when really need reboot and shutdow, otherwise just using print
-            # os.system("sudo reboot")
+            os.system("sudo reboot")
         elif duration >= 3:
-            print("SHUTDOWN")
-            # os.system("sudo shutdown -h now")
+            # print("SHUTDOWN")
+            os.system("sudo shutdown -h now")
