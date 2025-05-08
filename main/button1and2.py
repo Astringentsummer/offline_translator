@@ -1,33 +1,98 @@
-# Button1 function + Button2 function
+# Button1 function + Button2 function using gpiozero 
 # will use 2 sets of specific hardwares to record and play
 # How to test? 1. activate virtual env 2. connect 2 buttons rightly 3. run
-import RPi.GPIO as GPIO
+from gpiozero import Button
 import threading
 import time
 import os
 import glob
 import subprocess
-from recorder import AudioRecorder as GuestRecorder
-from recorder2 import AudioRecorder as UserRecorder
+import pyaudio
+import wave
 
-# Setup
-GPIO.setmode(GPIO.BCM)
-BUTTON1_PIN = 27 #connect 2 buttons rightly Button1
-BUTTON2_PIN = 22 #Button2
-GPIO.setup(BUTTON1_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-GPIO.setup(BUTTON2_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+BUTTON1_PIN = 27 #button1
+BUTTON2_PIN = 22 #button2
+button1 = Button(BUTTON1_PIN, pull_up=True, bounce_time=0.2)
+button2 = Button(BUTTON2_PIN, pull_up=True, bounce_time=0.2)
 
-# Recorders
-guest_recorder = GuestRecorder(mic_name="SF-558") #Button1
-user_recorder = UserRecorder(mic_name="EPOS PC 7 USB") #Button2
+class AudioRecorder:
+    def __init__(self, sample_rate=48000, channels=1, chunk=1024, folder_name=None, mic_name=None):
+        self.sample_rate = sample_rate
+        self.channels = channels
+        self.chunk = chunk
+        self.audio = pyaudio.PyAudio()
+        self.stream = None
+        self.frames = []
+        self.is_recording = False
+        self.device_index = self.get_input_device_index(mic_name)
+        self.device_name = self.get_device_name(self.device_index)
+        self.folder_name = folder_name or ("guest_mic_recordings" if "SF-558" in mic_name else "user_mic_recordings")
+        self.output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", self.folder_name)
+        os.makedirs(self.output_dir, exist_ok=True)
 
-# Threads
+    def get_input_device_index(self, target_name=None):
+        for i in range(self.audio.get_device_count()):
+            info = self.audio.get_device_info_by_index(i)
+            if info.get("maxInputChannels", 0) > 0:
+                if target_name is None or target_name.lower() in info["name"].lower():
+                    return i
+        raise ValueError(f"No input device found matching name: {target_name}")
+
+    def get_device_name(self, index):
+        return self.audio.get_device_info_by_index(index)["name"].replace(" ", "_")
+
+    def start_recording(self):
+        if self.is_recording:
+            return
+        self.frames = []
+        self.stream = self.audio.open(format=pyaudio.paInt16,
+                                      channels=self.channels,
+                                      rate=self.sample_rate,
+                                      input=True,
+                                      input_device_index=self.device_index,
+                                      frames_per_buffer=self.chunk)
+        self.is_recording = True
+
+    def stop_recording(self):
+        if not self.is_recording:
+            return
+        self.stream.stop_stream()
+        self.stream.close()
+        self.is_recording = False
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        filename = f"{self.device_name}_{timestamp}.wav"
+        filepath = os.path.join(self.output_dir, filename)
+        with wave.open(filepath, 'wb') as wf:
+            wf.setnchannels(self.channels)
+            wf.setsampwidth(self.audio.get_sample_size(pyaudio.paInt16))
+            wf.setframerate(self.sample_rate)
+            wf.writeframes(b''.join(self.frames))
+        self.last_filepath = filepath
+
+    def record_chunk(self):
+        if self.is_recording:
+            try:
+                data = self.stream.read(self.chunk, exception_on_overflow=False)
+                self.frames.append(data)
+            except Exception as e:
+                print(f"Audio read error: {e}")
+
+    def close(self):
+        if self.stream:
+            self.stream.close()
+        self.audio.terminate()
+
+    def get_last_filepath(self):
+        return getattr(self, "last_filepath", None)
+
+guest_recorder = AudioRecorder(mic_name="SF-558")
+user_recorder = AudioRecorder(mic_name="EPOS PC 7 USB")
+
 guest_thread = None
 user_thread = None
 stop_guest = False
 stop_user = False
 
-# Helpers
 def get_latest_recording(folder_name):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     folder = os.path.join(base_dir, "..", folder_name)
@@ -64,7 +129,7 @@ def button1_released():
     if latest_file:
         print(f"Latest guest recording: {latest_file}")
         try:
-            subprocess.run(["aplay", "-D", "plughw:CARD=USB,DEV=0", latest_file]) #Button1
+            subprocess.run(["aplay", "-D", "plughw:CARD=USB,DEV=0", latest_file]) #hardware of button1
         except Exception as e:
             print(f"Error playing guest audio: {e}")
 
@@ -91,33 +156,21 @@ def button2_released():
     if latest_file:
         print(f"Latest user recording: {latest_file}")
         try:
-            subprocess.run(["aplay", "-D", "plughw:CARD=Device,DEV=0", latest_file]) #Button2
+            subprocess.run(["aplay", "-D", "plughw:CARD=Device,DEV=0", latest_file]) #hardware of button2
         except Exception as e:
             print(f"Error playing user audio: {e}")
 
-# GPIO Callbacks
-def gpio_callback(channel):
-    if channel == BUTTON1_PIN:
-        if GPIO.input(BUTTON1_PIN) == 0:
-            button1_pressed()
-        else:
-            button1_released()
-    elif channel == BUTTON2_PIN:
-        if GPIO.input(BUTTON2_PIN) == 0:
-            button2_pressed()
-        else:
-            button2_released()
+#gpiozero 
+button1.when_pressed = button1_pressed
+button1.when_released = button1_released
+button2.when_pressed = button2_pressed
+button2.when_released = button2_released
 
-GPIO.add_event_detect(BUTTON1_PIN, GPIO.BOTH, callback=gpio_callback, bouncetime=200)
-GPIO.add_event_detect(BUTTON2_PIN, GPIO.BOTH, callback=gpio_callback, bouncetime=200)
-
-# Main loop
 try:
     print("Waiting for button presses...")
     while True:
         time.sleep(1)
 except KeyboardInterrupt:
-    GPIO.cleanup()
     guest_recorder.close()
     user_recorder.close()
     print("Cleaned up and exited.")

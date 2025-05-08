@@ -2,3 +2,12 @@
 tollmachter-venv/
 __pycache__/
 *.pyc
+languages/de.wav
+languages/en.wav
+languages/zh.wav
+main/button1and2.py
+main/translate_text_argos.py
+main/translate_text_language_tool_python.py
+main/translate_text_MarianMT.py
+main/button1and2.py
+*.py
