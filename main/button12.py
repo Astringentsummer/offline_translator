@@ -1,7 +1,4 @@
-# Button3 + Button4 decide source and target languages
-# And then Button1 function or Button2 function using gpiozero to record sounds
-# will use 2 sets of specific hardwares to record and play
-# How to test? 1. activate virtual env 2. connect 4 buttons rightly 3. run test
+# Button1 function + Button2 function using gpiozero , integate with whisper
 from gpiozero import Button
 import threading
 import time
@@ -12,71 +9,13 @@ import pyaudio
 import wave
 import whisper
 import warnings
-from transformers import MarianMTModel, MarianTokenizer
-
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
 
-# Button pin definitions
-BUTTON1_PIN = 27  # button1 - guest mic
-BUTTON2_PIN = 22  # button2 - user mic
-BUTTON3_PIN = 20  # button3 - select source language
-BUTTON4_PIN = 21  # button4 - select target language
 
+BUTTON1_PIN = 27 #button1
+BUTTON2_PIN = 22 #button2
 button1 = Button(BUTTON1_PIN, pull_up=True, bounce_time=0.2)
 button2 = Button(BUTTON2_PIN, pull_up=True, bounce_time=0.2)
-button3 = Button(BUTTON3_PIN)
-button4 = Button(BUTTON4_PIN)
-
-# Language selection logic
-language_codes = ['en', 'de', 'zh']
-source_index = 0
-target_index = 0
-selected_langs = {'source': language_codes[source_index], 'target': language_codes[target_index]}
-
-# Audio confirmation files 
-audio_map = {
-    's_en': os.path.join(os.path.dirname(__file__), '../languages/s_en.wav'),
-    's_de': os.path.join(os.path.dirname(__file__), '../languages/s_de.wav'),
-    's_zh': os.path.join(os.path.dirname(__file__), '../languages/s_zh.wav'),
-    't_en': os.path.join(os.path.dirname(__file__), '../languages/t_en.wav'),
-    't_de': os.path.join(os.path.dirname(__file__), '../languages/t_de.wav'),
-    't_zh': os.path.join(os.path.dirname(__file__), '../languages/t_zh.wav'),
-    'error': os.path.join(os.path.dirname(__file__), '../languages/error.wav')
-}
-
-def play_audio(lang_code):
-    path = audio_map.get(lang_code)
-    if path and os.path.exists(path):
-        print(f"Playing audio: {path}")
-        subprocess.run(['aplay', "-D", "plughw:CARD=Device,DEV=0", path]) # using usb speaker to replay audip_map, letting user and guest know which language is chosen
-    else:
-        print(f"Audio file not found: {path}")
-
-def select_source():
-    global source_index
-    source_index = (source_index + 1) % len(language_codes)
-    selected_langs['source'] = language_codes[source_index]
-    print(f"Selected source language: {selected_langs['source']}")
-    play_audio(f"s_{selected_langs['source']}") # play source languages' audioes
-
-def select_target():
-    global target_index
-    target_index = (target_index + 1) % len(language_codes)
-    selected_langs['target'] = language_codes[target_index]
-    print(f"Selected target language: {selected_langs['target']}")
-    play_audio(f"t_{selected_langs['target']}") # play target languages' audioes
-
-def translate_text(source_lang_code, target_lang_code, text):
-    model_name = f"Helsinki-NLP/opus-mt-{source_lang_code}-{target_lang_code}" # using MarienMT with small model to translate text
-    try:
-        tokenizer = MarianTokenizer.from_pretrained(model_name)
-        model = MarianMTModel.from_pretrained(model_name)
-        inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True)
-        translated_tokens = model.generate(**inputs)
-        translation = tokenizer.decode(translated_tokens[0], skip_special_tokens=True)
-        return translation
-    except Exception as e:
-        return f"Translation error: {e}"
 
 class AudioRecorder:
     def __init__(self, sample_rate=48000, channels=1, chunk=1024, folder_name=None, mic_name=None):
@@ -89,7 +28,7 @@ class AudioRecorder:
         self.is_recording = False
         self.device_index = self.get_input_device_index(mic_name)
         self.device_name = self.get_device_name(self.device_index)
-        self.folder_name = folder_name or ("guest_mic_recordings" if "SF-558" in mic_name else "user_mic_recordings") #Button1's mic
+        self.folder_name = folder_name or ("guest_mic_recordings" if "SF-558" in mic_name else "user_mic_recordings")
         self.output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", self.folder_name)
         os.makedirs(self.output_dir, exist_ok=True)
 
@@ -171,12 +110,6 @@ def record_loop(recorder, stop_flag_name):
 
 # Button 1 Logic (Guest)
 def button1_pressed():
-    source = selected_langs['source']
-    target = selected_langs['target']
-    if source == target:
-        print("Source and target languages must be different.")  # when Source and target languages are same, error.wav will be replayed once pressing button1 or button2
-        play_audio("error")
-        return
     global guest_thread, stop_guest
     if guest_recorder.is_recording:
         return
@@ -198,31 +131,27 @@ def button1_released():
     if latest_file:
         print(f"Latest guest recording: {latest_file}")
         try:
-            subprocess.run(["aplay", "-D", "plughw:CARD=USB,DEV=0", latest_file]) #button1's speaker, latest_file needs be changed later
+            subprocess.run(["aplay", "-D", "plughw:CARD=USB,DEV=0", latest_file])  # hardware of button1
         except Exception as e:
             print(f"Error playing guest audio: {e}")
+
+        # --- Whisper integration starts here ---
         try:
-            source = selected_langs['source']
-            target = selected_langs['target']
-            print(f"Transcribing ({source})...")
-            model = whisper.load_model("tiny", device="cpu")          #using whisper for speech2text
-            result = model.transcribe(latest_file, language=source)
-            recognized = result["text"].strip()
-            print("Recognized text:", recognized)
-            print(f"Translating to {target}...")
-            translation = translate_text(source, target, recognized)
-            print("Translated text:", translation)
+            print("Source language (e.g., en, zh, de, ar):") # type to choose source lanuage
+            language = input("Enter source language code: ").strip().lower()
+
+            print(f"Transcribing with tiny model using language: {language}") #using whisper(tiny) for speech2text
+            model = whisper.load_model("tiny", device="cpu")
+            result = model.transcribe(latest_file, language=language)
+            print("Recognized text:", result["text"])
+
         except Exception as e:
-            print(f"Error in transcription or translation: {e}")
+            print(f"Error during transcription: {e}")
+        # --- Whisper integration ends here ---
+
 
 # Button 2 Logic (User)
 def button2_pressed():
-    source = selected_langs['source']
-    target = selected_langs['target']
-    if source == target:
-        print("Source and target languages must be different.") # when Source and target languages are same, error.wav will be replayed once pressing button1 or button2
-        play_audio("error")
-        return
     global user_thread, stop_user
     if user_recorder.is_recording:
         return
@@ -244,30 +173,30 @@ def button2_released():
     if latest_file:
         print(f"Latest user recording: {latest_file}")
         try:
-            subprocess.run(["aplay", "-D", "plughw:CARD=Device,DEV=0", latest_file]) #button2's speaker
+            subprocess.run(["aplay", "-D", "plughw:CARD=Device,DEV=0", latest_file])  # hardware of button2
         except Exception as e:
             print(f"Error playing user audio: {e}")
-        try:
-            source = selected_langs['source']
-            target = selected_langs['target']
-            print(f"Transcribing ({source})...")
-            model = whisper.load_model("tiny", device="cpu")
-            result = model.transcribe(latest_file, language=source)
-            recognized = result["text"].strip()
-            print("Recognized text:", recognized)
-            print(f"Translating to {target}...")
-            translation = translate_text(source, target, recognized)
-            print("Translated text:", translation)
-        except Exception as e:
-            print(f"Error in transcription or translation: {e}")
 
-# gpiozero button binding
+        # --- Whisper integration starts here ---
+        try:
+            print("Source language (e.g., en, zh, de, ar):") # type to choose source lanuage
+            language = input("Enter source language code: ").strip().lower()
+
+            print(f"Transcribing with tiny model using language: {language}") #using whisper(tiny) for speech2text
+            model = whisper.load_model("tiny", device="cpu")
+            result = model.transcribe(latest_file, language=language)
+            print("Recognized text:", result["text"])
+
+        except Exception as e:
+            print(f"Error during transcription: {e}")
+        # --- Whisper integration ends here ---
+
+
+#gpiozero 
 button1.when_pressed = button1_pressed
 button1.when_released = button1_released
 button2.when_pressed = button2_pressed
 button2.when_released = button2_released
-button3.when_pressed = select_source
-button4.when_pressed = select_target
 
 try:
     print("Waiting for button presses...")
