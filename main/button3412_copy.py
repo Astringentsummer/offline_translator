@@ -1,6 +1,6 @@
-# Button3 + Button4 decide source and target languages
+# Button3 + Button4 decide source and target languages (source = guest's native language, target = user's native language)
 # And then Button1 function or Button2 function using gpiozero to record sounds
-# will use 2 sets of specific hardwares to record and play
+# will use 2 sets of specific hardwares to record and replay the translation
 # How to test? 1. activate virtual env 2. connect 4 buttons rightly 3. run test
 from gpiozero import Button
 import threading
@@ -35,12 +35,12 @@ selected_langs = {'source': language_codes[source_index], 'target': language_cod
 
 # Audio confirmation files 
 audio_map = {
-    's_en': os.path.join(os.path.dirname(__file__), '../languages/s_en.wav'),
-    's_de': os.path.join(os.path.dirname(__file__), '../languages/s_de.wav'),
-    's_zh': os.path.join(os.path.dirname(__file__), '../languages/s_zh.wav'),
-    't_en': os.path.join(os.path.dirname(__file__), '../languages/t_en.wav'),
-    't_de': os.path.join(os.path.dirname(__file__), '../languages/t_de.wav'),
-    't_zh': os.path.join(os.path.dirname(__file__), '../languages/t_zh.wav'),
+    's_en': os.path.join(os.path.dirname(__file__), '../languages/en_customer.wav'),
+    's_de': os.path.join(os.path.dirname(__file__), '../languages/de_customer.wav'),
+    's_zh': os.path.join(os.path.dirname(__file__), '../languages/zh_customer.wav'),
+    't_en': os.path.join(os.path.dirname(__file__), '../languages/en_user.wav'),
+    't_de': os.path.join(os.path.dirname(__file__), '../languages/de_user.wav'),
+    't_zh': os.path.join(os.path.dirname(__file__), '../languages/zh_user.wav'),
     'error': os.path.join(os.path.dirname(__file__), '../languages/error.wav')
 }
 
@@ -48,7 +48,7 @@ def play_audio(lang_code):
     path = audio_map.get(lang_code)
     if path and os.path.exists(path):
         print(f"Playing audio: {path}")
-        subprocess.run(['aplay', "-D", "plughw:CARD=Device,DEV=0", path]) # using usb speaker to replay audip_map, letting user and guest know which language is chosen
+        subprocess.run(['aplay', "-D", "plughw:CARD=USB,DEV=0", path]) # using headset's speaker to replay audip_map, letting the user hear his native language(target) to confirme them
     else:
         print(f"Audio file not found: {path}")
 
@@ -261,7 +261,7 @@ def button2_pressed():
     source = selected_langs['source']
     target = selected_langs['target']
     if source == target:
-        print("Source and target languages must be different.") # when Source and target languages are same, error.wav will be replayed once pressing button1 or button2
+        print("Source and target languages must be different.") # when source and target languages are same, error.wav will be replayed once pressing button1 or button2
         play_audio("error")
         return
     global user_thread, stop_user
@@ -285,7 +285,7 @@ def button2_released():
     if latest_file:
         print(f"Latest user recording: {latest_file}")
         try:
-            source = selected_langs['target']
+            source = selected_langs['target']  # button2ss target language and source language are opposite with button1's
             target = selected_langs['source']
             print(f"Transcribing ({source})...")
             model = whisper.load_model("tiny", device="cpu")
