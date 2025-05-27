@@ -169,6 +169,45 @@ def record_loop(recorder, stop_flag_name):
         recorder.record_chunk()
         time.sleep(0.01)
 
+def speak_with_piper(text, lang_code, device):
+    piper_models = {
+        "zh": {
+            "model": "zh_CN-huayan-medium.onnx",
+            "config": "zh_CN-huayan-medium.onnx.json"
+        },
+        "en": {
+            "model": "en_US-john-medium.onnx",
+            "config": "en_US-john-medium.onnx.json"
+        },
+        "de": {
+            "model": "de_DE-thorsten-medium.onnx",
+            "config": "de_DE-thorsten-medium.onnx.json"
+        }
+    }
+
+    PIPER_PATH = "/home/tollmatcher2/offline_translator/piper_rebuild/piper/piper"
+    OUTPUT_DIR = "/home/tollmatcher2/offline_translator/output"
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    voice = piper_models[lang_code]
+    timestamp = int(time.time())
+    output_file = os.path.join(OUTPUT_DIR, f"{lang_code}_{timestamp}.wav")
+
+    command = [
+        PIPER_PATH,
+        "--model", f"/home/tollmatcher2/offline_translator/piper_rebuild/piper/{voice['model']}",
+        "--config", f"/home/tollmatcher2/offline_translator/piper_rebuild/piper/{voice['config']}",
+        "--output_file", output_file,
+    ]
+
+    print("Synthesizing speech with Piper...")
+    process = subprocess.Popen(command, stdin=subprocess.PIPE)
+    process.communicate(input=text.encode("utf-8"))
+    print(f"Synthesized speech saved to: {output_file}")
+
+    # Play using the specified speaker device
+    subprocess.run(["aplay", "-D", device, output_file])
+
 # Button 1 Logic (Guest)
 def button1_pressed():
     source = selected_langs['source']
@@ -198,22 +237,24 @@ def button1_released():
     if latest_file:
         print(f"Latest guest recording: {latest_file}")
         try:
-            subprocess.run(["aplay", "-D", "plughw:CARD=USB,DEV=0", latest_file]) #button1's speaker, latest_file needs be changed later
-        except Exception as e:
-            print(f"Error playing guest audio: {e}")
-        try:
             source = selected_langs['source']
             target = selected_langs['target']
             print(f"Transcribing ({source})...")
-            model = whisper.load_model("tiny", device="cpu")          #using whisper for speech2text
+            model = whisper.load_model("tiny", device="cpu")
             result = model.transcribe(latest_file, language=source)
             recognized = result["text"].strip()
             print("Recognized text:", recognized)
+
             print(f"Translating to {target}...")
             translation = translate_text(source, target, recognized)
             print("Translated text:", translation)
+
+            speak_with_piper(translation, target, device="plughw:CARD=USB,DEV=0")
+
         except Exception as e:
-            print(f"Error in transcription or translation: {e}")
+            print(f"Error in transcription, translation, or TTS: {e}")
+
+
 
 # Button 2 Logic (User)
 def button2_pressed():
@@ -244,10 +285,6 @@ def button2_released():
     if latest_file:
         print(f"Latest user recording: {latest_file}")
         try:
-            subprocess.run(["aplay", "-D", "plughw:CARD=Device,DEV=0", latest_file]) #button2's speaker
-        except Exception as e:
-            print(f"Error playing user audio: {e}")
-        try:
             source = selected_langs['source']
             target = selected_langs['target']
             print(f"Transcribing ({source})...")
@@ -255,11 +292,16 @@ def button2_released():
             result = model.transcribe(latest_file, language=source)
             recognized = result["text"].strip()
             print("Recognized text:", recognized)
+
             print(f"Translating to {target}...")
             translation = translate_text(source, target, recognized)
             print("Translated text:", translation)
+
+            speak_with_piper(translation, target, device="plughw:CARD=Device,DEV=0")
+
         except Exception as e:
-            print(f"Error in transcription or translation: {e}")
+            print(f"Error in transcription, translation, or TTS: {e}")
+
 
 # gpiozero button binding
 button1.when_pressed = button1_pressed
