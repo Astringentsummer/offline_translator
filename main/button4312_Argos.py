@@ -12,7 +12,8 @@ import pyaudio
 import wave
 import whisper
 import warnings
-from transformers import MarianMTModel, MarianTokenizer
+import argostranslate.package
+import argostranslate.translate
 
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
 
@@ -96,18 +97,17 @@ def select_source():
     play_audio(f"{selected_langs['target']}_{selected_langs['source']}")
 
 
-
+#Argos
 def translate_text(source_lang_code, target_lang_code, text):
-    model_name = f"Helsinki-NLP/opus-mt-{source_lang_code}-{target_lang_code}" # using MarienMT with small model to translate text
-    try:
-        tokenizer = MarianTokenizer.from_pretrained(model_name)
-        model = MarianMTModel.from_pretrained(model_name)
-        inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True)
-        translated_tokens = model.generate(**inputs)
-        translation = tokenizer.decode(translated_tokens[0], skip_special_tokens=True)
-        return translation
-    except Exception as e:
-        return f"Translation error: {e}"
+    installed_languages = argostranslate.translate.get_installed_languages()
+    from_lang = next((lang for lang in installed_languages if lang.code == source_lang_code), None)
+    to_lang = next((lang for lang in installed_languages if lang.code == target_lang_code), None)
+
+    if not from_lang or not to_lang:
+        return f"Error: Argos translation not available from {source_lang_code} to {target_lang_code}."
+
+    translation = from_lang.get_translation(to_lang)
+    return translation.translate(text)
 
 class AudioRecorder:
     def __init__(self, sample_rate=48000, channels=1, chunk=1024, folder_name=None, mic_name=None):
@@ -271,22 +271,30 @@ def button1_released():
         try:
             source = selected_langs['source']
             target = selected_langs['target']
+
+            t0 = time.time()
             print(f"Transcribing ({source})...")
             model = whisper.load_model("tiny", device="cpu")
             result = model.transcribe(latest_file, language=source)
             recognized = result["text"].strip()
+            t1 = time.time()
             print("Recognized text:", recognized)
+            print(f"[Time] STT took {t1 - t0:.2f} seconds")
 
             print(f"Translating to {target}...")
             translation = translate_text(source, target, recognized)
+            t2 = time.time()
             print("Translated text:", translation)
+            print(f"[Time] Translation took {t2 - t1:.2f} seconds")
 
+            print("Speaking with Piper...")
             speak_with_piper(translation, target, device="plughw:CARD=USB,DEV=0")
+            t3 = time.time()
+            print(f"[Time] TTS took {t3 - t2:.2f} seconds")
+            print(f"[Total Time] {t3 - t0:.2f} seconds")
 
         except Exception as e:
             print(f"Error in transcription, translation, or TTS: {e}")
-
-
 
 # Button 2 Logic (User)
 def button2_pressed():
@@ -305,6 +313,7 @@ def button2_pressed():
     user_thread = threading.Thread(target=record_loop, args=(user_recorder, 'stop_user'))
     user_thread.start()
 
+# button2ss target language and source language are opposite with button1's
 def button2_released():
     global user_thread, stop_user
     if not user_recorder.is_recording:
@@ -317,23 +326,32 @@ def button2_released():
     if latest_file:
         print(f"Latest user recording: {latest_file}")
         try:
-            source = selected_langs['target']  # button2ss target language and source language are opposite with button1's
+            source = selected_langs['target']  # Note: target/source reversed here
             target = selected_langs['source']
+
+            t0 = time.time()
             print(f"Transcribing ({source})...")
             model = whisper.load_model("tiny", device="cpu")
             result = model.transcribe(latest_file, language=source)
             recognized = result["text"].strip()
+            t1 = time.time()
             print("Recognized text:", recognized)
+            print(f"[Time] STT took {t1 - t0:.2f} seconds")
 
             print(f"Translating to {target}...")
             translation = translate_text(source, target, recognized)
+            t2 = time.time()
             print("Translated text:", translation)
+            print(f"[Time] Translation took {t2 - t1:.2f} seconds")
 
+            print("Speaking with Piper...")
             speak_with_piper(translation, target, device="plughw:CARD=Device,DEV=0")
+            t3 = time.time()
+            print(f"[Time] TTS took {t3 - t2:.2f} seconds")
+            print(f"[Total Time] {t3 - t0:.2f} seconds")
 
         except Exception as e:
             print(f"Error in transcription, translation, or TTS: {e}")
-
 
 # gpiozero button binding
 button1.when_pressed = button1_pressed
