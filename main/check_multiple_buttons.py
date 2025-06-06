@@ -15,7 +15,6 @@ buttons_illegal_state = False
 button1_confirmed = False
 button2_confirmed = False
 
-# 新增用于 Button3/4 控制
 button3_disturbed = False
 button3_timer_running = False
 button4_disturbed = False
@@ -24,7 +23,6 @@ button4_timer_running = False
 def check_multiple_buttons(btn):
     global buttons_illegal_state, button3_disturbed, button4_disturbed
     with button_lock:
-        # 如果自己已经按下过，则表示重复按，也要视为干扰
         if btn == button3 and button3_timer_running:
             print("[DEBUG] Button3 disturbed by re-pressing itself")
             button3_disturbed = True
@@ -132,7 +130,7 @@ def button3_pressed():
 
     def confirm():
         global button3_timer_running
-        time.sleep(1)
+        time.sleep(0.2)
         with button_lock:
             if button3_disturbed or buttons_illegal_state:
                 print("Button3: language switch cancelled")
