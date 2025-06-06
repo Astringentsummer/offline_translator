@@ -28,7 +28,6 @@ button2 = Button(BUTTON2_PIN, pull_up=True, bounce_time=0.2)
 button3 = Button(BUTTON3_PIN)
 button4 = Button(BUTTON4_PIN)
 
-system_locked_by = None 
 # For Button1 (Guest Mic) long-press confirmation
 guest_button_confirmed = False
 guest_record_start_time = None
@@ -114,12 +113,6 @@ play_audio("default", owner=None, allow_interrupt_from=["button1", "button2", "b
 
 # Button4
 def select_target():
-    global system_locked_by  
-
-    if system_locked_by and system_locked_by != "button4":
-        print(f"System is locked by {system_locked_by}. Button4 cannot operate.")
-        return
-
     if not interrupt_audio_playback("button4"):
         return  # do not proceed
 
@@ -128,16 +121,11 @@ def select_target():
     selected_langs['target'] = language_codes[target_index]
     print(f"Selected target language: {selected_langs['target']}")
     play_audio(f"t_{selected_langs['target']}", owner="button4", allow_interrupt_from=["button4"])
+
 #play target languages' audioes, couldn't be interrupted by any other button expect itself
     
-# Button3
+# Button3    
 def select_source():
-    global system_locked_by 
-
-    if system_locked_by and system_locked_by != "button3":
-        print(f"System is locked by {system_locked_by}. Button3 cannot operate.")
-        return
-
     if not interrupt_audio_playback("button3"):
         return
 
@@ -156,6 +144,7 @@ def select_source():
 
     print(f"Selected source language: {selected_langs['target']}_{selected_langs['source']}")
     play_audio(f"{selected_langs['target']}_{selected_langs['source']}", owner="button3", allow_interrupt_from=["button3"])
+
 # couldn't be interrupted by any other button expect itself
 
 
@@ -303,12 +292,6 @@ def speak_with_piper(text, lang_code, device):
 
 # Button 1 Logic (Guest)
 def button1_pressed():
-    global system_locked_by  
-    if system_locked_by and system_locked_by != "button1":
-        print(f"System is locked by {system_locked_by}. Button1 cannot operate.")
-        return
-
-    system_locked_by = "button1"  
     interrupt_audio_playback("button1")
 
     global guest_thread, stop_guest, guest_button_confirmed, guest_record_start_time
@@ -331,10 +314,9 @@ def button1_pressed():
 
 
 
-
 def button1_released():
     global guest_thread, stop_guest, guest_button_confirmed, guest_record_start_time
-    global system_locked_by
+
     if not guest_recorder.is_recording:
         return
 
@@ -348,7 +330,6 @@ def button1_released():
         print("Button1 released too early — delete latest recording")
         if latest_file and os.path.exists(latest_file):
             os.remove(latest_file)
-        system_locked_by = None
         return
 
     print("Button1 released after 1s — continue with STT + translation + TTS")
@@ -383,19 +364,11 @@ def button1_released():
 
         except Exception as e:
             print(f"Error in transcription, translation, or TTS: {e}")
-        finally:
-            system_locked_by = None
-            print("System lock released from button1")
 
 
 
 # Button 2 Logic (User)
 def button2_pressed():
-    global system_locked_by
-    if system_locked_by and system_locked_by != "button2":
-        print(f"System is locked by {system_locked_by}. Button2 cannot operate.")
-        return
-    system_locked_by = "button2" 
     interrupt_audio_playback("button2")
 
     global user_thread, stop_user, user_button_confirmed, user_record_start_time
@@ -429,8 +402,7 @@ def button2_pressed():
 # button2s target language and source language are opposite with button1's
 def button2_released():
     global user_thread, stop_user, user_button_confirmed, user_record_start_time
-    global system_locked_by 
-    
+
     if not user_recorder.is_recording:
         return
 
@@ -479,9 +451,6 @@ def button2_released():
 
         except Exception as e:
             print(f"Error in transcription, translation, or TTS: {e}")
-        finally:
-            system_locked_by = None
-            print("System lock released from button2")
 
 # gpiozero button binding
 button1.when_pressed = button1_pressed
