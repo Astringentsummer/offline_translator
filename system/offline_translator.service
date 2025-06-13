@@ -1,0 +1,12 @@
+[Unit]
+Description=Offline Translator Auto Start
+After=network.target
+
+[Service]
+User=tollmatcher1
+WorkingDirectory=/home/tollmatcher1/offline_translator/main
+ExecStart=/home/tollmatcher1/tollmachter-env/bin/python3 /home/tollmatcher1/offline_translator/main/button4312_Argos_friday.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

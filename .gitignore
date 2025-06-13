@@ -1,3 +1,12 @@
 .DS_Store
 tollmachter-venv/
 __pycache__/
+
+guest_mic_recordings/*
+!guest_mic_recordings/.gitkeep
+
+user_mic_recordings/*
+!user_mic_recordings/.gitkeep
+
+output/*
+!output/.gitkeep

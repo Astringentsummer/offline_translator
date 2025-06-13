@@ -444,6 +444,7 @@ def button2_released():
         print("Button2 released too early — delete latest recording")
         if latest_file and os.path.exists(latest_file):
             os.remove(latest_file)
+        system_locked_by = None
         return
         
     print("Button2 released after 1s — continue with STT + translation + TTS")
